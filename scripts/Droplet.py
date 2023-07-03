@@ -27,6 +27,7 @@ class Droplet:
         self.mass_center = theta / (2*np.pi) * self.cell
 
 
+
 class DropletOnFloor(Droplet):
 
     def __init__(self, frame, indexes):
@@ -47,10 +48,12 @@ class DropletOnFloor(Droplet):
         self.radius = np.mean(self.radius[-10:-1])
 
     def find_alpha(self):
-        alpha = np.arcsin(2 * self.radius * self.height / (self.height**2 + self.radius**2))* 180.0 / np.pi
+        alpha = np.arcsin(2 * self.radius * self.height / (self.height**2 + self.radius**2)) * 180.0 / np.pi
         if self.height < ((self.height**2 + self.radius**2) / (2 * self.height)):
             alpha = 180-alpha
         self.alpha = self.alpha + alpha
         self.averaged = self.averaged + 1
+
+
 
 

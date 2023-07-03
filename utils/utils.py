@@ -1,5 +1,4 @@
 import numpy as np
-from chemfiles import Frame
 
 
 def custom_distance(positions, cell_lengths, center=None):

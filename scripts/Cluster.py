@@ -1,9 +1,10 @@
 from sklearn.cluster import DBSCAN
-from utils.utils import custom_distance
+from utils.utils import custom_distance, custom_distance_without_Z_pbc
 
 class Cluster:
+    #TODO change distance functions in different PBC
 
-    def __init__(self, frame, selection=None, cutoff=5, neighbours=1):
+    def __init__(self, frame, selection=None, cutoff=5, neighbours=10):
         self.frame = frame
         self.cutoff = cutoff
         self.neighbours = neighbours
@@ -33,9 +34,12 @@ class Cluster:
                 frame_labels.append(self.clustering[self.dict_residue_to_selected_atom[key][0]])
         self.clustering = frame_labels
 
-    def cluster_frame(self):
+    def cluster_frame(self, pbc_z=True):
         self.create_positions()
-        custom_distance_matrix = custom_distance(self.positions, self.frame.cell.lengths)
+        if pbc_z:
+            custom_distance_matrix = custom_distance(self.positions, self.frame.cell.lengths)
+        else:
+            custom_distance_matrix = custom_distance_without_Z_pbc(self.positions, self.frame.cell.lengths)
         self.clustering = DBSCAN(eps=self.cutoff, min_samples=self.neighbours, metric='precomputed', n_jobs=2).fit(custom_distance_matrix).labels_
 
         if self.selection is not None:

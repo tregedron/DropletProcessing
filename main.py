@@ -46,6 +46,7 @@ def process_trajectory(trj_path, topol_path, cutoff, neighbours):
 
                 df.loc[len(df.index)] = [frame.step, number_of_clusters-1]
 
+
     df.to_csv(os.path.join(path_out_dir, f"num_of_time_{cutoff}_{neighbours}_full"), sep='\t')
 
 if __name__ == '__main__':
