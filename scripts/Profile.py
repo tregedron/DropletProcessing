@@ -6,17 +6,34 @@ import os
 
 
 class Profile:
-    # TODO think about different spacing over axis
+    # TODO: think about different spacing over axis
+    # TODO: spacing is not the best term for it's functional
+    """
+        Class is used to deal with the "profile" of system. The profile is treated as a density voxel map.
+    """
     def __init__(self, spacing=100):
+        """
+            :param spacing: the number of layers for system to be divided on. The voxel map will be
+            spacing x spacing x spacing.
+            self.profile - voxel system profile (spacing x spacing x spacing)
+            self.num_of_averaging - number of frames where the profile was calculated
+        """
         self.spacing = spacing
         self.profile = np.zeros((spacing, spacing, spacing))
         self.num_of_averaging = 0
 
     def update_profile(self, droplet):
-        '''
-        droplet can also be liquid phase...
-        :return:
-        '''
+        """
+            Calculate the profile of current frame (droplet or liquid phase).
+            :param droplet: !!!DROPLET CAN ALSO BE LIQUID PHASE!!! droplet or liquid phase for profile to be calculated.
+            Contains particle positions, simulation cells and other information.
+
+            distances - are "distances" from particles to mass center with respect to the pbc, it can either be
+            positive or negative, it is used to make profile "centered" to (spacing/2, spacing/2, spacing/2) voxel.
+            Hence, the droplet is always in the center of profile.
+
+            boxes - are the voxels the particle belongs to.
+        """
         self.num_of_averaging += 1
 
         cell = np.array(droplet.cell)
@@ -31,11 +48,21 @@ class Profile:
         for box in boxes:
             self.profile[box[0], box[1], box[2]] += 1
 
-    def save(self, path):
-        with open(os.path.join(path, f'profile_{self.spacing}.npy'), 'wb') as f:
+    def save(self, path, name="profile"):
+        """
+            The method is used to save profiles to np file.
+            :param path: path to the folder where to store profile.
+            :param name: name for profile as a file.
+        """
+        with open(os.path.join(path, f'{name}_{self.spacing}.npy', 'wb')) as f:
             np.save(f, self.profile / self.num_of_averaging)
 
     def load(self, path, name):
+        """
+            The method is used to load profiles from np file.
+            :param path: path to the folder where profile is stored.
+            :param name: name of profile as a file.
+        """
         with open(os.path.join(path, name), 'rb') as f:
             self.profile = np.load(f)
             if self.spacing != self.profile.shape[0]:
@@ -45,6 +72,11 @@ class Profile:
                 print(self.profile.shape)
 
     def plot_profile(self, path, name="voxel"):
+        """
+            The method is used to save profiles as plots.
+            :param path: path to the folder where to store profile.
+            :param name: name for set of pictures.
+        """
         fig, ax = plt.subplots(figsize=(10, 10), subplot_kw={"projection": "3d"})
         fig.tight_layout()
         ax.voxels(self.profile, alpha=0.1)
@@ -71,6 +103,14 @@ class Profile:
         plt.close()
 
     def process_profile_to_border(self, path, averaged=True):
+        """
+            The method is used to extract border of "object" (droplet of liquid phase) from profiles. Now the density
+            approach is used, but the convolutions can be employed in the future. The threshold can be changed in
+            the future.
+            :param path: path to the folder where profile is stored.
+            :param averaged: defines whether the profile was already averaged with the respect of number of frames
+            or not.
+        """
         if not averaged:
             avg_prof = self.profile / self.num_of_averaging
         else:
@@ -86,6 +126,12 @@ class Profile:
             np.save(f, border)
 
     def process_profile_g_of_r(self, path, averaged=True):
+        """
+            The method is used to calculate radial distribution function from mass center of profile.
+            :param path: path to the folder where profile is stored.
+            :param averaged: defines whether the profile was already averaged with the respect of number of frames
+            or not.
+        """
         if not averaged:
             avg_prof = self.profile / self.num_of_averaging
         else:
@@ -116,7 +162,15 @@ class Profile:
         plt.close()
 
 
-    def process_profile_2d(self, path, name="", averaged=True):
+    def process_profile_2d(self, path, add_name="", averaged=True):
+        """
+            The method is used to calculate 2d density heatmap (in R and Z variables). R is x^2+y^2, Z is Z.
+            Hence, the voxel profile is averaged over the rotation around the rotation axis.
+            :param path: path to the folder where profile is stored.
+            :param add_name: additional name for 2d heatmap. the default name is "Rz_profile_.png".
+            :param averaged: defines whether the profile was already averaged with the respect of number of frames
+            or not.
+        """
         if not averaged:
             avg_prof = self.profile / self.num_of_averaging
         else:
@@ -136,10 +190,6 @@ class Profile:
 
         print(N, V)
 
-        # for Z in range(profile_rz.shape[1]):
-        #     for R in range(profile_rz.shape[0]):
-        #         profile_rz[R, Z] = profile_rz[R, Z] / (2 * np.pi * (R + 0.5)) * V / N
-
         for R in range(profile_rz.shape[0]):
             profile_rz[R, :] = profile_rz[R, :] / (2 * np.pi * (R+0.5)) * V / N
 
@@ -153,21 +203,33 @@ class Profile:
         ax.set_ylabel('Z')
 
         ax.pcolormesh(profile_rz.T, cmap='YlOrRd', vmin=0, vmax=rho_max)
-        plt.savefig(os.path.join(path, f'Rz_profile_{name}.png'), bbox_inches='tight')
+        plt.savefig(os.path.join(path, f'Rz_profile_{add_name}.png'), bbox_inches='tight')
         plt.show()
         plt.close()
 
 
 class ProfileOnFloor(Profile):
+    """
+        Class is used to deal with the "profile" of system. The profile is treated as a density voxel map.
+        The difference from Profile class is another distances calculations (pbc in Z direction in not used)
+    """
 
     def __init__(self, spacing):
         super().__init__(spacing)
 
     def update_profile(self, droplet):
-        '''
+        """
+            Calculate the profile of current frame (droplet or liquid phase).
+            :param droplet: !!!DROPLET CAN ALSO BE LIQUID PHASE!!! droplet or liquid phase for profile to be calculated.
+            Contains particle positions, simulation cells and other information.
 
-        :return:
-        '''
+            distances - are "distances" from particles to mass center with respect to the pbc (without Z direction),
+            it can either be positive or negative, it is used to make profile "centered" to
+            (spacing/2, spacing/2, spacing/2) voxel. Hence, the droplet is always in the center of profile.
+
+            boxes - are the voxels the particle belongs to.
+        """
+
         self.num_of_averaging += 1
 
         cell =  np.array(droplet.cell)
@@ -188,14 +250,15 @@ class ProfileOnFloor(Profile):
 
 class ProfileLiquidPhase(Profile):
     # TODO here is a ЖЕСТЬ with python indexes usage... but it just works...
+    """
+        Class is used to deal with the "profile" of system. The profile is treated as a density voxel map.
+        The difference from Profile class is another boxes calculations, now the mass center is in (0,0,0) box. This
+        moves the bubble to the center of the profile.
+    """
     def __init__(self, spacing):
         super().__init__(spacing)
 
     def update_profile(self, droplet):
-        '''
-        droplet can also be liquid phase...
-        :return:
-        '''
         self.num_of_averaging += 1
 
         cell = np.array(droplet.cell)
