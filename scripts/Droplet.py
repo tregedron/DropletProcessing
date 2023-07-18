@@ -76,11 +76,12 @@ class DropletOnFloor(Droplet):
         """
         self.floor = min(self.positions[:, 2])
         self.height = max(self.positions[:, 2]) - self.floor
-        positions = self.positions[self.positions[:, 2] - self.floor < 3]
+        positions = self.positions[self.positions[:, 2] - self.floor < 5]
         mass_center_in_disc = np.array([self.mass_center[0], self.mass_center[1], self.floor])
         dr = custom_distance_2d(positions, self.cell, center=mass_center_in_disc)
         self.radius = np.sort(dr, axis=None)
-        self.radius = np.mean(self.radius[-10:-1])
+        cut_number = int(np.ceil(len(self.radius)*0.1))
+        self.radius = np.mean(self.radius[-cut_number:])
 
     def find_alpha(self):
         """
