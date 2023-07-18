@@ -45,12 +45,20 @@ if __name__ == '__main__':
                         help='cutoff in DBSCAN clusterization')
     parser.add_argument('-nn', '--neighbours', default=10, type=int,
                         help='neighbours in DBSCAN clusterization')
+    parser.add_argument('-res', '--path-to-results', default="results", type=str,
+                        help='path to directory to store results')
     args = parser.parse_args()
 
     start_time = time.time()
 
-    trj_temp = os.path.join("data", "8000AR_NVT_bubble.xtc")
-    top_temp = os.path.join("data", "8000AR_NVT_bubble.gro")
+    # trj_temp = os.path.join("data", "8000AR_NVT_bubble.xtc")
+    # top_temp = os.path.join("data", "8000AR_NVT_bubble.gro")
 
-    process_trajectory_pbc(trj_temp, top_temp)
+    path_to_trj = args.trajectory
+    # trj_path = os.path.join("data", "NVT_0_4.xtc")
+    path_to_top = args.topology
+    if path_to_top is None:
+        path_to_top = path_to_trj.split(".")[0] + ".gro"
+
+    process_trajectory_pbc(path_to_trj, path_to_top)
     print("--- %s seconds ---" % (time.time() - start_time))
