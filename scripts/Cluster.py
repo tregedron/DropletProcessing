@@ -16,6 +16,7 @@ class Cluster:
             :param cutoff: cut off distance for clustering algorithm, provided in Angstroms.
             :param neighbours: number of neighbours in cut off sphere for algorithm (DBSCAN) to expand cluster from
             this point. If 1 is set the DBSCAN is hierarchical clustering. But the noise is not marked as noise (-1).
+            :param expand: boolean variable defines the usage of expand cluster function.
         """
         self.frame = frame
         self.cutoff = cutoff
@@ -50,8 +51,9 @@ class Cluster:
             was used.
         """
         frame_labels = []
+        shift = list(self.dict_residue_to_selected_atom.keys())[0]
         for key in self.dict_residue_to_selected_atom.keys():
-            for ind in self.frame.topology.residues[key-1].atoms:
+            for ind in self.frame.topology.residues[key-shift].atoms:
                 frame_labels.append(self.clustering[self.dict_residue_to_selected_atom[key][0]])
         self.clustering = frame_labels
 
@@ -73,4 +75,3 @@ class Cluster:
 
         if self.selection is not None:
             self.expand_clustering_to_full_frame()
-
