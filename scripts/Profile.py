@@ -8,20 +8,23 @@ import os
 
 
 class Profile:
-    # TODO: think about different spacing over axis
     # TODO: spacing is not the best term for it's functional
     """
         Class is used to deal with the "profile" of system. The profile is treated as a density voxel map.
     """
-    def __init__(self, slices=100):
+    def __init__(self, slices=None, scaling=1):
         """
             :param slices: the number of layers (slices) for system to be divided on. The voxel map will be
-            slices x slices x slices.
-            self.profile - voxel system profile (slices x slices x slices)
+            slices[0] x slices[1] x slices[2].
+            self.profile - voxel system profile (slices[0] x slices[1] x slices[2])
             self.num_of_averaging - number of frames where the profile was calculated
         """
-        self.slices = slices
-        self.profile = np.zeros((slices, slices, slices))
+        if slices is None:
+            slices = np.array([100, 100, 100])
+        self.scaling = scaling
+        self.slices = slices.astype(int)*self.scaling
+
+        self.profile = np.zeros((slices[0], slices[1], slices[2]))
         self.num_of_averaging = 0
 
     def update_profile(self, droplet):
@@ -46,7 +49,7 @@ class Profile:
         distances = np.where(distances < -1 * 0.5 * cell, distances + cell, distances)
 
         # boxes = np.round((distances/cell * self.slices)) + np.round(self.slices/2)
-        boxes = np.floor((distances/cell * self.slices)) + np.round(self.slices/2)
+        boxes = np.floor((distances/cell * self.slices)) + np.floor(self.slices/2)
         boxes = boxes.astype(int)
         for box in boxes:
             self.profile[box[0], box[1], box[2]] += 1
@@ -57,7 +60,7 @@ class Profile:
             :param path: path to the folder where to store profile.
             :param name: name for profile as a file.
         """
-        with open(os.path.join(path, f'{name}_{self.slices}.npy'), 'wb') as f:
+        with open(os.path.join(path, f'{name}_{self.scaling}.npy'), 'wb') as f:
             np.save(f, self.profile / self.num_of_averaging)
 
     def load(self, path, name):
@@ -68,9 +71,9 @@ class Profile:
         """
         with open(os.path.join(path, name), 'rb') as f:
             self.profile = np.load(f)
-            if self.slices != self.profile.shape[0]:
+            if self.slices[0] != self.profile.shape[0] or self.slices[1] != self.profile.shape[1] or self.slices[2] != self.profile.shape[2]:
                 print(self.profile.shape)
-                self.slices = self.profile.shape[0]
+                self.slices = np.array(self.profile.shape).astype(int)
             else:
                 print(self.profile.shape)
 
@@ -125,7 +128,7 @@ class Profile:
         border = np.where(avg_prof > 0.2 * average, avg_prof, 0)
         border = np.where(border < 0.4 * average, border, 0)
 
-        with open(os.path.join(path, f'border_profile_{self.slices}.npy'), 'wb') as f:
+        with open(os.path.join(path, f'border_profile_{self.scaling}.npy'), 'wb') as f:
             np.save(f, border)
 
     def process_profile_g_of_r(self, path, averaged=True):
@@ -140,12 +143,12 @@ class Profile:
         else:
             avg_prof = self.profile
 
-        center = np.array([self.slices/2, self.slices/2, self.slices/2])
-        g_of_r = np.zeros(self.slices)
+        center = self.slices/2
+        g_of_r = np.zeros(np.max(self.slices))
 
-        for x in range(self.slices):
-            for y in range(self.slices):
-                for z in range(self.slices):
+        for x in range(self.slices[0]):
+            for y in range(self.slices[1]):
+                for z in range(self.slices[2]):
                     dr = np.round(np.sqrt((x - center[0])**2 + (y - center[1])**2 + (z - center[2])**2))
                     dr = dr.astype(int)
                     g_of_r[dr] += avg_prof[x, y, z]
@@ -178,12 +181,12 @@ class Profile:
         else:
             avg_prof = self.profile
 
-        center = np.array([self.slices/2, self.slices/2, self.slices/2])
-        profile_rz = np.zeros((self.slices, self.slices))
-        for x in range(self.slices):
-            for y in range(self.slices):
-                for z in range(self.slices):
-                    dr = np.round(np.sqrt((x - center[0])**2 + (y - center[1])**2))
+        center = self.slices/2
+        profile_rz = np.zeros((np.max(self.slices[0:2]), self.slices[2]))
+        for x in range(self.slices[0]):
+            for y in range(self.slices[1]):
+                for z in range(self.slices[2]):
+                    dr = np.floor(np.sqrt((x - center[0])**2 + (y - center[1])**2))
                     dr = dr.astype(int)
                     profile_rz[dr, z] += avg_prof[x, y, z]
 
@@ -197,7 +200,7 @@ class Profile:
 
         rho_max = np.max(profile_rz)
 
-        with open(os.path.join(path, f'2d_border_profile_{self.slices}.npy'), 'wb') as f:
+        with open(os.path.join(path, f'2d_border_profile_{self.scaling}.npy'), 'wb') as f:
             np.save(f, profile_rz)
 
         fig = plt.figure(figsize=(6, 6))
@@ -212,6 +215,11 @@ class Profile:
         # plt.show()
         plt.close()
 
+    def fit_profile(self, path, add_name="", averaged=True):
+        def func(xy, a, b, c, d, e, f):
+            x, y = xy
+            return a + b * x + c * y + d * x ** 2 + e * y ** 2 + f * x * y
+
 
 class ProfileOnFloor(Profile):
     """
@@ -219,7 +227,10 @@ class ProfileOnFloor(Profile):
         The difference from Profile class is another distances calculations (pbc in Z direction in not used)
     """
 
-    def __init__(self, slices):
+    def __init__(self, slices=None):
+        if slices is None:
+            slices = [100, 100, 100]
+
         super().__init__(slices)
 
     def update_profile(self, droplet):
@@ -280,7 +291,7 @@ class ProfileLiquidPhase(Profile):
             self.profile[box[0], box[1], box[2]] += 1
 
 
-def find_angle_profile_2d(path, name="2d_border_profile_100.npy", lower_shift=1, account_layers=8):
+def find_angle_profile_2d(path, name="2d_border_profile_1.npy", lower_shift=1, account_layers=8):
     """
         The method is used to calculate 2d density heatmap (in R and Z variables). R is x^2+y^2, Z is Z.
         Hence, the voxel profile is averaged over the rotation around the rotation axis.
