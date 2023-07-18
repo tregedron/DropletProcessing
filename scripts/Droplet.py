@@ -1,6 +1,7 @@
 import numpy as np
 from utils.utils import custom_distance, custom_distance_without_Z_pbc, custom_distance_2d
 
+mass_dictionary = {"O": 15.999, "C": 12.0096, "H": 1.00784, "A": 1}
 
 class Droplet:
     """
@@ -21,6 +22,7 @@ class Droplet:
         self.size = len(self.positions)
         self.mass_center = None
         self.cell = frame.cell.lengths
+        self.masses = np.array([mass_dictionary[frame.topology.atoms[i].name[0]] for i in self.indexes])
 
 
     def calculate_mass_center(self):
@@ -32,8 +34,8 @@ class Droplet:
         theta = self.positions/self.cell * 2 * np.pi
         ksi = np.cos(theta)
         dzeta = np.sin(theta)
-        ksi = np.average(ksi, axis=0)
-        dzeta = np.average(dzeta, axis=0)
+        ksi = np.average(ksi, weights=self.masses, axis=0)
+        dzeta = np.average(dzeta, weights=self.masses, axis=0)
         theta = np.arctan2(-dzeta, -ksi) + np.pi
         self.mass_center = theta / (2*np.pi) * self.cell
 
