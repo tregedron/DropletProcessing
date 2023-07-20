@@ -108,6 +108,24 @@ class Profile:
 
         plt.close()
 
+        fig = plt.figure(figsize=(6, 6))
+        ax = fig.add_subplot(111)
+        fig.tight_layout()
+
+        ax.set_xlabel('X')
+        ax.set_ylabel('Z')
+
+        ax.pcolormesh(self.profile[:, int(self.slices[1]/2), :].T, cmap='YlOrRd')
+        plt.savefig(os.path.join(path, f'xz_profile_{name}.png'), bbox_inches='tight')
+
+        ax.set_xlabel('Y')
+        ax.set_ylabel('Z')
+
+        ax.pcolormesh(self.profile[int(self.slices[0] / 2), :, :].T, cmap='YlOrRd')
+        plt.savefig(os.path.join(path, f'yz_profile_{name}.png'), bbox_inches='tight')
+        # plt.show()
+        plt.close()
+
     def process_profile_to_border(self, path, averaged=True):
         """
             The method is used to extract border of "object" (droplet of liquid phase) from profiles. Now the density
@@ -126,10 +144,11 @@ class Profile:
         print(avg_prof[np.nonzero(avg_prof)].shape)
 
         border = np.where(avg_prof > 0.2 * average, avg_prof, 0)
-        border = np.where(border < 0.4 * average, border, 0)
+        border = np.where(border < 0.5 * average, border, 0)
 
         with open(os.path.join(path, f'border_profile_{self.scaling}.npy'), 'wb') as f:
             np.save(f, border)
+
 
     def process_profile_g_of_r(self, path, averaged=True):
         """
