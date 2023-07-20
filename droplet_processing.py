@@ -10,7 +10,13 @@ import time
 import argparse
 
 
-def process_droplet_pbc_angle_only(trj_path, topol_path, cutoff, neighbours, selection=None, pbc_z=False, path_to_results="results"):
+def process_droplet_pbc_angle_only(trj_path,
+                                   topol_path,
+                                   cutoff,
+                                   neighbours,
+                                   selection=None,
+                                   pbc_z=False,
+                                   path_to_results="results"):
     print("Working on trajectory", trj_path)
     print("topology: ", topol_path)
     print("Cut-off: ", cutoff, " neighbours: ", neighbours)
@@ -39,37 +45,13 @@ def process_droplet_pbc_angle_only(trj_path, topol_path, cutoff, neighbours, sel
     df.to_csv(os.path.join(path_out_dir, f"num_of_time_{cutoff}_{neighbours}_full"), sep='\t')
 
 
-def process_droplet_pbc_profile_only(trj_path, topol_path, cutoff, neighbours, selection=None, pbc_z=False, path_to_results="results"):
-    print("Working on trajectory", trj_path)
-    print("topology: ", topol_path)
-    print("Cut-off: ", cutoff, " neighbours: ", neighbours)
-
-    path_out_dir = os.path.join(path_to_results, trj_path.split("/")[-1].split(".")[0])
-    os.makedirs(path_out_dir, exist_ok=True)
-
-    profile = Profile(100)
-    df = pd.DataFrame(columns=['time', 'in droplet', 'height', 'radius', 'angle'])
-    if selection is not None:
-        selection = Selection(selection)
-
-    with Trajectory(trj_path) as trajectory:
-        trajectory.set_topology(topol_path)
-        for frame in tqdm(trajectory):
-            cluster = Cluster(frame, selection, cutoff=cutoff, neighbours=neighbours)
-            cluster.cluster_frame(pbc_z=pbc_z)
-            cluster.clustering = np.array(cluster.clustering)
-            number_of_clusters = len(set(cluster.clustering)) - 1
-            if number_of_clusters == 1:
-                droplet = DropletOnFloor(frame, np.where(cluster.clustering != -1)[0])
-                droplet.calculate_mass_center()
-                profile.update_profile(droplet)
-                df.loc[len(df.index)] = [frame.step, droplet.size, droplet.height, droplet.radius, droplet.alpha]
-
-    profile.save(path_out_dir)
-    df.to_csv(os.path.join(path_out_dir, f"num_of_time_{cutoff}_{neighbours}_full"), sep='\t')
-
-
-def process_droplet_pbc_full_info(trj_path, topol_path, cutoff, neighbours, selection=None, pbc_z=False, path_to_results="results"):
+def process_droplet_pbc_no_xyz(trj_path,
+                               topol_path,
+                               cutoff,
+                               neighbours,
+                               selection=None,
+                               pbc_z=False,
+                               path_to_results="results"):
     print("Working on trajectory", trj_path)
     print("topology: ", topol_path)
     print("Cut-off: ", cutoff, " neighbours: ", neighbours)
@@ -81,6 +63,52 @@ def process_droplet_pbc_full_info(trj_path, topol_path, cutoff, neighbours, sele
         frame = trajectory_gro.read()
         box = np.ceil(frame.cell.lengths).astype(int)
 
+    profile = Profile(slices=box)
+    print(profile.slices)
+
+    df = pd.DataFrame(columns=['time', 'in droplet', 'height', 'radius', 'angle'])
+    if selection is not None:
+        selection = Selection(selection)
+
+    with Trajectory(trj_path) as trajectory:
+        trajectory.set_topology(topol_path)
+        for frame in tqdm(trajectory):
+            if frame.step > 500000:
+                cluster = Cluster(frame, selection, cutoff=cutoff, neighbours=neighbours)
+                cluster.cluster_frame(pbc_z=pbc_z)
+                cluster.clustering = np.array(cluster.clustering)
+                number_of_clusters = len(set(cluster.clustering)) - 1
+                if number_of_clusters == 1:
+                    droplet = DropletOnFloor(frame, np.where(cluster.clustering != -1)[0])
+                    droplet.calculate_mass_center()
+                    droplet.calc_h_r()
+                    droplet.find_alpha()
+
+                    profile.update_profile(droplet)
+
+                    df.loc[len(df.index)] = [frame.step, droplet.size, droplet.height, droplet.radius, droplet.alpha]
+
+    profile.save(path_out_dir)
+    df.to_csv(os.path.join(path_out_dir, f"num_of_time_{cutoff}_{neighbours}_full"), sep='\t')
+
+
+def process_droplet_pbc_full_info(trj_path,
+                                  topol_path,
+                                  cutoff,
+                                  neighbours,
+                                  selection=None,
+                                  pbc_z=False,
+                                  path_to_results="results"):
+    print("Working on trajectory", trj_path)
+    print("topology: ", topol_path)
+    print("Cut-off: ", cutoff, " neighbours: ", neighbours)
+
+    path_out_dir = os.path.join(path_to_results, trj_path.split("/")[-1].split(".")[0])
+    os.makedirs(path_out_dir, exist_ok=True)
+
+    with Trajectory(topol_path) as trajectory_gro:
+        frame = trajectory_gro.read()
+        box = np.ceil(frame.cell.lengths).astype(int)
 
     profile = Profile(slices=box)
     print(profile.slices)
@@ -219,11 +247,11 @@ if __name__ == '__main__':
     #                               pbc_z=True,
     #                               path_to_results=args.path_to_results)
     # argon
-    process_droplet_pbc_full_info(trj_path=path_to_trj,
-                                  topol_path=path_to_top,
-                                  cutoff=args.cutoff,
-                                  neighbours=args.neighbours,
-                                  pbc_z=False,
-                                  path_to_results=args.path_to_results)
+    process_droplet_pbc_no_xyz(trj_path=path_to_trj,
+                               topol_path=path_to_top,
+                               cutoff=args.cutoff,
+                               neighbours=args.neighbours,
+                               pbc_z=False,
+                               path_to_results=args.path_to_results)
 
     print("--- %s seconds ---" % (time.time() - start_time))
