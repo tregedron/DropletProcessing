@@ -1,14 +1,14 @@
 import numpy as np
 from utils.utils import custom_distance, custom_distance_without_Z_pbc, custom_distance_2d
 
-mass_dictionary = {"O": 15.999, "C": 12.0096, "H": 1.00784, "A": 1}
+mass_dictionary = {"O": 15.999, "C": 12.0096, "H": 1.00784, "A": 1, "P": 1}
 
 class Droplet:
     """
         Class is used to store the droplet and some info about it.
     """
 
-    def __init__(self, frame, indexes):
+    def __init__(self, frame, indexes, mass_center=None):
         """
             :param frame: chemfiles frame, usually contains a topology, particle positions, simulation cell parameters.
             :param indexes: list of indexes of atoms. Tells whis atoms belong to this droplet, can be obtained from
@@ -20,7 +20,7 @@ class Droplet:
         self.indexes = indexes
         self.positions = frame.positions[indexes]
         self.size = len(self.positions)
-        self.mass_center = None
+        self.mass_center = mass_center
         self.cell = frame.cell.lengths
         self.masses = np.array([mass_dictionary[frame.topology.atoms[i].name[0]] for i in self.indexes])
 

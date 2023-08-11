@@ -1,6 +1,7 @@
 from scripts.Cluster import Cluster
 from scripts.Droplet import Droplet, DropletOnFloor
 from scripts.Profile import Profile, ProfileOnFloor
+from collections import Counter
 import numpy as np
 from chemfiles import Topology, Frame, Atom, UnitCell, Trajectory, Residue, Selection
 import pandas as pd
@@ -52,6 +53,7 @@ def process_droplet_pbc_no_xyz(trj_path,
                                selection=None,
                                pbc_z=False,
                                path_to_results="results"):
+
     print("Working on trajectory", trj_path)
     print("topology: ", topol_path)
     print("Cut-off: ", cutoff, " neighbours: ", neighbours)
@@ -63,7 +65,7 @@ def process_droplet_pbc_no_xyz(trj_path,
         frame = trajectory_gro.read()
         box = np.ceil(frame.cell.lengths).astype(int)
 
-    profile = Profile(slices=box)
+    profile = Profile(slices=box, scaling=1)
     print(profile.slices)
 
     df = pd.DataFrame(columns=['time', 'in droplet', 'height', 'radius', 'angle'])
@@ -110,8 +112,8 @@ def process_droplet_pbc_full_info(trj_path,
         frame = trajectory_gro.read()
         box = np.ceil(frame.cell.lengths).astype(int)
 
-    profile = Profile(slices=box)
-    print(profile.slices)
+    profile = Profile(slices=box, scaling=1)
+    print("profile now: ", profile.slices)
 
     df = pd.DataFrame(columns=['time', 'in droplet', 'height', 'radius', 'angle'])
     if selection is not None:
@@ -170,7 +172,13 @@ def process_droplet_pbc_full_info(trj_path,
     df.to_csv(os.path.join(path_out_dir, f"num_of_time_{cutoff}_{neighbours}_full"), sep='\t')
 
 
-def process_free_droplet(trj_path, topol_path, cutoff, neighbours, selection=None, path_to_results="results"):
+def process_free_droplet(trj_path,
+                         topol_path,
+                         cutoff,
+                         neighbours,
+                         selection=None,
+                         pbc_z=True,
+                         path_to_results="results"):
     print("Working on trajectory", trj_path)
     print("topology: ", topol_path)
     print("Cut-off: ", cutoff, " neighbours: ", neighbours)
@@ -178,42 +186,76 @@ def process_free_droplet(trj_path, topol_path, cutoff, neighbours, selection=Non
     path_out_dir = os.path.join(path_to_results, trj_path.split("/")[-1].split(".")[0])
     os.makedirs(path_out_dir, exist_ok=True)
 
-    profile = Profile(100)
+    with Trajectory(topol_path) as trajectory_gro:
+        frame = trajectory_gro.read()
+        box = np.ceil(frame.cell.lengths).astype(int)
+
+    profile = Profile(slices=box, scaling=1)
 
     df = pd.DataFrame(columns=['time', 'in droplet'])
     if selection is not None:
         selection = Selection(selection)
 
     with Trajectory(trj_path) as trajectory:
-        with Trajectory(os.path.join(path_out_dir, f"clustered_{cutoff}_{neighbours}_full.xyz"),
-                        "w") as outtrajectory:
-            trajectory.set_topology(topol_path)
+        trajectory.set_topology(topol_path)
+        for frame in tqdm(trajectory):
+            if frame.step > 2500000:
+                cluster = Cluster(frame, selection, cutoff=cutoff, neighbours=neighbours)
+                cluster.cluster_frame(pbc_z=pbc_z)
+                cluster.clustering = np.array(cluster.clustering)
 
-            for frame in tqdm(trajectory):
-                if frame.step % 1000:
-                    outframe = Frame()
+                counter = dict(Counter(cluster.clustering))
 
-                    cluster = Cluster(frame, selection, cutoff=cutoff, neighbours=neighbours)
-                    cluster.cluster_frame(pbc_z=True)
+                counter.pop(-1)
+                if len(counter.keys()) >= 1:
+                    biggest_ind = max(counter, key=counter.get)
 
-                    number_of_clusters = len(set(cluster.clustering)) - 1
+                    droplet = Droplet(frame, np.where(cluster.clustering == biggest_ind)[0])
+                    droplet.calculate_mass_center()
+                    mass_center = droplet.mass_center
 
-                    if number_of_clusters == 1:
-                        for atom_ind, cluster_num in enumerate(cluster.clustering):
-                            if cluster_num == -1:
-                                outframe.add_atom(Atom(f"Gaz"), [0, 0, 0])
-                            else:
-                                outframe.add_atom(Atom(f"AR{cluster_num}"), frame.positions[atom_ind])
+                    droplet = Droplet(frame, np.where(cluster.clustering != -2)[0], mass_center=mass_center)
 
-                            droplet = Droplet(frame, np.where(cluster.clustering != -1)[0])
-                            droplet.calculate_mass_center()
-                            outframe.add_atom(Atom(f"Mass"), droplet.mass_center)
-                            outtrajectory.write(outframe)
-                            profile.update_profile(droplet)
-                            df.loc[len(df.index)] = [frame.step, droplet.size]
+                    profile.update_profile(droplet)
+                    df.loc[len(df.index)] = [frame.step, droplet.size]
 
-    profile.save(path_out_dir)
+    profile.save(path_out_dir, name="profile_full")
     df.to_csv(os.path.join(path_out_dir, f"num_of_time_{cutoff}_{neighbours}_full"), sep='\t')
+
+
+def process_equil_info(trj_path,
+                       topol_path,
+                       cutoff,
+                       neighbours,
+                       selection=None,
+                       pbc_z=False,
+                       path_to_results="results"):
+    print("Working on trajectory", trj_path)
+    print("topology: ", topol_path)
+    print("Cut-off: ", cutoff, " neighbours: ", neighbours)
+
+    path_out_dir = os.path.join(path_to_results, trj_path.split("/")[-1].split(".")[0])
+    os.makedirs(path_out_dir, exist_ok=True)
+
+    df = pd.DataFrame(columns=['time', 'number_of_clusters', 'number_in_gas'])
+    if selection is not None:
+        selection = Selection(selection)
+
+    with Trajectory(trj_path) as trajectory:
+        trajectory.set_topology(topol_path)
+
+        for frame in tqdm(trajectory):
+
+            cluster = Cluster(frame, selection, cutoff=cutoff, neighbours=neighbours)
+            cluster.cluster_frame(pbc_z=pbc_z)
+            cluster.clustering = np.array(cluster.clustering)
+
+            number_of_clusters = len(set(cluster.clustering)) - 1
+            number_in_gas = cluster.clustering[cluster.clustering == -1].shape[0]
+
+            df.loc[len(df.index)] = [frame.step, number_of_clusters, number_in_gas]
+
+    df.to_csv(os.path.join(path_out_dir, f"equil_{cutoff}_{neighbours}"), sep=',')
 
 
 if __name__ == '__main__':
@@ -233,25 +275,29 @@ if __name__ == '__main__':
     start_time = time.time()
 
     path_to_trj = args.trajectory
-    # trj_path = os.path.join("data", "NVT_0_4.xtc")
     path_to_top = args.topology
-    if path_to_top is None:
-        path_to_top = path_to_trj.split(".")[0] + ".gro"
+
+    # path_to_trj = os.path.join("data", "NVT_0_4.xtc")
+    # path_to_top = "data/10000AR_NVT.gro"
+    #
+    # if path_to_top is None:
+    #     path_to_top = path_to_trj.split(".")[0] + ".gro"
 
     # # water
-    # process_droplet_pbc_full_info(trj_path=path_to_trj,
+    # process_droplet_pbc_no_xyz(trj_path=path_to_trj,
     #                               topol_path=path_to_top,
     #                               cutoff=args.cutoff,
     #                               neighbours=args.neighbours,
     #                               selection="name OH2",
     #                               pbc_z=True,
     #                               path_to_results=args.path_to_results)
+    process_free_droplet("data/3000AR_NVT_3.xtc", "data/3000AR_NVT_3.gro", 7, 10, selection=None, path_to_results="results")
     # argon
-    process_droplet_pbc_no_xyz(trj_path=path_to_trj,
-                               topol_path=path_to_top,
-                               cutoff=args.cutoff,
-                               neighbours=args.neighbours,
-                               pbc_z=False,
-                               path_to_results=args.path_to_results)
+    # process_droplet_pbc_no_xyz(trj_path=path_to_trj,
+    #                            topol_path=path_to_top,
+    #                            cutoff=args.cutoff,
+    #                            neighbours=args.neighbours,
+    #                            pbc_z=False,
+    #                            path_to_results=args.path_to_results)
 
     print("--- %s seconds ---" % (time.time() - start_time))
